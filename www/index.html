@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <title>
+		reproduce.debian.net/amd64 - forky (arch:amd64)
+        </title>
+        <style>
+        body {
+            font-family: sans-serif;
+            font-size: 18pt;
+        }
+        h1 {
+            font-size: 24pt;
+        }
+        h3 {
+            font-size: 18pt;
+        }
+
+        #search-results {
+            margin: 18pt 0;
+        }
+
+        pre {
+            margin: 0;
+        }
+
+        img {
+            vertical-align: middle;
+            max-width: 1920;
+            width: 50%;
+        }
+
+        #search-results pre {
+            margin: 12pt 0;
+        }
+
+        .status {
+            font-weight: bold;
+        }
+
+        .good {
+            color: green;
+        }
+
+        .fail {
+            color: yellow;
+        }
+
+        .bad {
+            color: red;
+        }
+
+        .unknown {
+            color: #957fff;
+        }
+
+        footer {
+            font-size: 12pt;
+        }
+        </style>
+        <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // package search
+            function spanWith(text) {
+                let s = document.createElement('span');
+                s.textContent = text;
+                return s;
+            }
+
+            function linkTo(href, text) {
+                let a = document.createElement('a');
+                a.href = href;
+                a.textContent = text;
+                return a;
+            }
+
+            function searchPkgs(query) {
+                let div = document.getElementById('search-results');
+                let url = '/api/v1/packages/binary?' + new URLSearchParams({
+                    name: query,
+                    seen_only: 'true',
+                });
+                fetch(url)
+                    .then(response => response.json())
+                    .then(data => {
+                        // clear children
+                        div.innerHTML = '';
+                        let result = data['records'];
+
+                        result.map(pkg => {
+                            let build_id = pkg.build_id;
+                            let artifact_id = pkg.artifact_id;
+                            let r = document.createElement('pre');
+
+                            r.appendChild(spanWith('['));
+                            let status = pkg['status'];
+                            let statusSpan = spanWith(status);
+                            statusSpan.className += ' status';
+                            if (status == 'GOOD') {
+                                statusSpan.className += ' good';
+                            } else if (status == 'FAIL') {
+                                statusSpan.className += ' fail';
+                            } else if (status == 'BAD') {
+                                statusSpan.className += ' bad';
+                            } else {
+                                statusSpan.className += ' unknown';
+                            }
+                            r.appendChild(statusSpan);
+                            r.appendChild(spanWith(`] ${pkg['name']} ${pkg['version']}\t\t`));
+
+                            if (build_id) {
+                                r.appendChild(spanWith(' ['));
+                                r.appendChild(linkTo(`/api/v1/builds/${build_id}/log`, 'log'));
+                                r.appendChild(spanWith(']'));
+                            }
+
+                            if (pkg.attestation_log_id) {
+                                r.appendChild(spanWith(' ['));
+                                r.appendChild(linkTo(`/api/v1/builds/${build_id}/artifacts/${artifact_id}/attestation`, 'attestation'));
+                                r.appendChild(spanWith(']'));
+                            }
+
+                            if (pkg.diffoscope_log_id) {
+                                r.appendChild(spanWith(' ['));
+                                r.appendChild(linkTo(`/api/v1/builds/${build_id}/artifacts/${artifact_id}/diffoscope`, 'diffoscope'));
+                                r.appendChild(spanWith(']'));
+                            }
+
+                            div.appendChild(r);
+                        });
+                    });
+            }
+
+            if (location.hash) {
+                searchPkgs(location.hash.substr(1));
+            }
+
+            document.getElementById('search').addEventListener('submit', function(e) {
+                e.preventDefault();
+                let query = document.getElementById('search-query').value;
+                location.href = `#${query}`;
+                searchPkgs(query);
+            });
+
+            // display stats
+            function updateStats(data) {
+                let div = document.getElementById('stats');
+                // clear children
+                div.innerHTML = '';
+                // add rows
+                data.map(row => {
+                    let r = document.createElement('pre');
+                    let key = row[0] + ': ';
+                    r.textContent = key.padEnd(25) + row[1];
+                    div.appendChild(r);
+                });
+            }
+
+            function fetchStats() {
+                fetch('/api/v1/dashboard')
+                    .then(response => response.json())
+                    .then(data => {
+                        let div = document.getElementById('stats');
+
+                        let good = data['rebuilds']['good'];
+                        let bad = data['rebuilds']['bad'];
+                        let fail = data['rebuilds']['fail'];
+                        let unknown = data['rebuilds']['unknown'];
+
+                        let running = data['jobs']['running'];
+                        let available = data['jobs']['available'];
+
+                        updateStats([
+                            ['reproduced', (100 / (good + bad + fail) * good).toFixed(2) + '%'],
+                            ['good', good],
+                            ['bad', bad],
+                            ['fail', fail],
+                            ['unknown', unknown],
+                            ['build progress', (100 / (good + bad + fail + unknown) * (good + bad + fail)).toFixed(2) + '%'],
+                            ['jobs running', running],
+                            ['jobs available', available],
+                        ]);
+                    });
+            }
+
+            setInterval(fetchStats, 60 * 1000);
+            fetchStats();
+        });
+        </script>
+    </head>
+    <body>
+        <h1>
+		<a href="https://rebuilderd-blissfully-good.exe.xyz">rebuilderd-blissfully-good</a>.exe.xyz
+	</h1>
+
+        <div id="stats">Loading stats...</div>
+
+        <div>
+            <h3>Binary package search</h3>
+            <form id="search">
+                <input type="text" id="search-query" placeholder="2ping">
+                <input type="submit" value="Search">
+            </form>
+        </div>
+        <div id="search-results">
+        </div>
+
+	<footer>
+	<hr>
+            pew pew, <a href="https://github.com/kpcyrd/rebuilderd">rebuilderd</a> using <a href="https://tracker.debian.org/pkg/devscripts">debrebuild</a> to reproduce what Debian distributes via <code><a href="https://ftp.debian.org/debian/dists/">ftp.debian.org</a></code> (allegedly). ♥️
+	<br>
+	    <small>
+		This setup is work in progress, URLs might not be stable here.
+		<br>In case you are wondering why we are doing this, then hopefully the <a href="https://reproducible-builds.org">Reproducible Builds website</a> will explain why this is useful.
+		<br>
+		contact: IRC preferred: #debian-reproducible on OFTC or mail to holger@d.o
+	    </small>
+        </footer>
+    </body>
+</html>
